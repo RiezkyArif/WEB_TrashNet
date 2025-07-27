@@ -6,12 +6,19 @@ import os
 import pandas as pd
 import time
 import matplotlib.pyplot as plt
-
-st.set_page_config(page_title="SmartWaste", layout="wide")
+import gdown
+import os
 
 # --- KONFIGURASI MODEL DAN LABEL ---
 MODEL_PATH = "model97.h5"
 class_names = ['Organik', 'Anorganik']
+
+# Download model jika belum ada
+if not os.path.exists(MODEL_PATH):
+    url = "https://drive.google.com/uc?1gT0XYZabCyzD4B_JgKfMb7P-vn"  # GANTI dengan ID file Drive asli kamu
+    gdown.download(url, MODEL_PATH, quiet=False)
+
+st.set_page_config(page_title="SmartWaste", layout="wide")
 
 @st.cache_resource
 def load_model():

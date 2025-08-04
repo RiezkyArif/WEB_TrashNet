@@ -34,53 +34,7 @@ except FileNotFoundError as e:
 
 # Fungsi untuk validasi gambar sampah
 def validate_waste_image(image, debug_mode=False):
-    """
-    Validasi yang lebih longgar untuk memastikan gambar adalah sampah
-    """
-    # Konversi ke array
-    img_array = np.array(image)
-    
-    # Debug info (hanya jika debug mode aktif)
-    if debug_mode:
-        st.write(f"🔍 Debug: Ukuran gambar = {img_array.shape}")
-        st.write(f"🔍 Debug: Rata-rata kecerahan = {np.mean(np.mean(img_array, axis=2)):.2f}")
-        st.write(f"🔍 Debug: Standar deviasi warna = {np.std(img_array):.2f}")
-    
-    # Cek ukuran gambar (lebih longgar)
-    if img_array.shape[0] < 50 or img_array.shape[1] < 50:
-        return False, "Gambar terlalu kecil. Upload gambar dengan resolusi yang lebih tinggi (minimal 50x50 pixel)."
-    
-    # Cek apakah gambar terlalu terang atau terlalu gelap (lebih longgar)
-    gray = np.mean(img_array, axis=2)
-    if np.mean(gray) < 20 or np.mean(gray) > 240:
-        return False, "Gambar terlalu terang atau terlalu gelap. Pastikan gambar sampah terlihat jelas."
-    
-    # Cek variasi warna (lebih longgar)
-    color_std = np.std(img_array)
-    if color_std < 15:
-        return False, "Gambar terlalu monoton. Pastikan gambar menunjukkan sampah yang jelas."
-    
-    # Cek apakah gambar memiliki terlalu banyak garis lurus (lebih longgar)
-    gray_img = np.mean(img_array, axis=2)
-    
-    # Deteksi garis horizontal dan vertikal
-    horizontal_lines = np.sum(np.abs(np.diff(gray_img, axis=1)) > 40)
-    vertical_lines = np.sum(np.abs(np.diff(gray_img, axis=0)) > 40)
-    
-    # Jika terlalu banyak garis, kemungkinan dokumen/tabel (lebih longgar)
-    if horizontal_lines > img_array.shape[0] * 0.5 or vertical_lines > img_array.shape[1] * 0.5:
-        return False, "Gambar terdeteksi sebagai dokumen/tabel. Hanya upload gambar sampah organik atau anorganik."
-    
-    # Cek apakah gambar memiliki terlalu banyak teks (lebih longgar)
-    contrast_areas = np.sum(np.std(gray_img, axis=1) > 60)
-    if contrast_areas > img_array.shape[0] * 0.6:
-        return False, "Gambar terdeteksi mengandung teks/dokumen. Hanya upload gambar sampah."
-    
-    # Cek rasio aspek (lebih longgar)
-    aspect_ratio = img_array.shape[1] / img_array.shape[0]
-    if aspect_ratio > 5 or aspect_ratio < 0.2:
-        return False, "Rasio aspek gambar tidak wajar. Pastikan gambar sampah tidak terlalu panjang atau lebar."
-    
+    # Bypass: always valid
     return True, "Gambar valid"
 
 # Fungsi tambahan untuk deteksi gambar yang bukan sampah
@@ -257,11 +211,11 @@ def page_classification():
     st.title("📸 Unggah gambar sampah yang ingin Anda klasifikasikan")
     st.info("⚠️ **PENTING**: Hanya upload gambar sampah organik atau anorganik yang jelas. Jangan upload foto wajah, dokumen, tabel, atau gambar lain yang bukan sampah.")
     st.write("Anda dapat mengunggah banyak gambar sekaligus, lalu memilih file mana yang ingin diproses.")
-    
-    # Debug mode toggle
-    debug_mode = st.checkbox("🔧 Debug Mode (Tampilkan info detail)")
-    bypass_validation = st.checkbox("🚀 Bypass Validasi (Untuk testing dataset)")
-    
+    # Hapus debug mode dan bypass validation UI
+    # debug_mode = st.checkbox("🔧 Debug Mode (Tampilkan info detail)")
+    # bypass_validation = st.checkbox("🚀 Bypass Validasi (Untuk testing dataset)")
+    debug_mode = False
+    bypass_validation = True
     st.markdown("""
     ### 🚫 **Yang TIDAK Diperbolehkan:**
     - 📄 Dokumen, tabel, atau kertas
@@ -314,7 +268,7 @@ def page_classification():
                             st.image(image, caption=f"Gambar ditolak: {uploaded_file.name}", width=300)
                         continue
                 else:
-                    st.info(f"🚀 **{uploaded_file.name}**: Validasi dilewati (Debug Mode)")
+                    st.info(f"🚀 **{uploaded_file.name}**: Validasi dilewati")
                 
                 # Tampilkan gambar di tengah hanya saat proses
                 with st.spinner('🔄 Memproses gambar...'):

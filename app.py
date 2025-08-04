@@ -342,7 +342,7 @@ def page_classification():
                             st.write(f"🔍 Debug: Confidence = {confidence:.2f}%")
                         
                         if confidence < confidence_threshold:
-                            st.warning(f"⚠️ **{uploaded_file.name}**: Tingkat kepercayaan rendah ({confidence:.2f}%). Kemungkinan gambar bukan sampah yang sesuai dataset. Silakan upload gambar sampah yang lebih jelas.")
+                            st.warning(f"⚠️ **{uploaded_file.name}**: Tingkat kepercayaan rendah ({confidence:.2f}%). Kemungkinan gambar bukan sampah yang sesuai. Silakan upload gambar sampah yang lebih jelas.")
                         else:
                             # Validasi tambahan berdasarkan hasil prediksi (lebih longgar)
                             gray_img = np.mean(np.array(image), axis=2)

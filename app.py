@@ -80,6 +80,18 @@ def detect_face_simple(image):
     skin_mask = (r > 95) & (g > 40) & (b > 20) & (r > g) & (r > b) & (abs(r - g) > 15)
     skin_ratio = np.sum(skin_mask) / (img_array.shape[0] * img_array.shape[1])
     
+    # Deteksi topeng atau benda putih yang menutupi wajah
+    # Topeng kartun biasanya berwarna putih dengan detail hitam
+    white_mask = (r > 200) & (g > 200) & (b > 200)  # Area putih
+    black_details = (r < 50) & (g < 50) & (b < 50)   # Detail hitam
+    
+    white_ratio = np.sum(white_mask) / (img_array.shape[0] * img_array.shape[1])
+    black_ratio = np.sum(black_details) / (img_array.shape[0] * img_array.shape[1])
+    
+    # Jika ada area putih yang besar dengan detail hitam, kemungkinan topeng
+    if white_ratio > 0.2 and black_ratio > 0.05:
+        return True, "Gambar terdeteksi mengandung topeng atau benda yang menutupi wajah. Hanya upload gambar sampah."
+    
     # Jika terlalu banyak area kulit, kemungkinan wajah
     if skin_ratio > 0.25:
         return True, "Gambar terdeteksi mengandung wajah/orang. Hanya upload gambar sampah."
@@ -107,12 +119,12 @@ def detect_face_simple(image):
             if symmetry_diff < 25 and skin_ratio > 0.05:
                 return True, "Gambar terdeteksi memiliki pola simetris seperti wajah. Hanya upload gambar sampah."
     
-    # Deteksi area bulat/oval yang bisa jadi kepala
+    # Deteksi area bulat/oval yang bisa jadi kepala atau topeng
     # Hitung gradient untuk deteksi tepi
     grad_x = np.abs(np.diff(gray, axis=1))
     grad_y = np.abs(np.diff(gray, axis=0))
     
-    # Deteksi area dengan gradient melingkar (kemungkinan kepala)
+    # Deteksi area dengan gradient melingkar (kemungkinan kepala/topeng)
     if grad_x.shape[1] > 0 and grad_y.shape[0] > 0:
         # Pastikan dimensi kompatibel
         min_height = min(grad_x.shape[0], grad_y.shape[0])
@@ -126,8 +138,35 @@ def detect_face_simple(image):
             circular_gradient = np.sqrt(grad_x_compat**2 + grad_y_compat**2)
             high_gradient_areas = np.sum(circular_gradient > 30)
             
-            if high_gradient_areas > (img_array.shape[0] * img_array.shape[1] * 0.08) and skin_ratio > 0.05:
-                return True, "Gambar terdeteksi mengandung bentuk kepala/wajah. Hanya upload gambar sampah."
+            # Deteksi bentuk oval dengan kombinasi area putih dan gradient melingkar
+            if high_gradient_areas > (img_array.shape[0] * img_array.shape[1] * 0.08):
+                if skin_ratio > 0.05:
+                    return True, "Gambar terdeteksi mengandung bentuk kepala/wajah. Hanya upload gambar sampah."
+                elif white_ratio > 0.15:  # Jika ada area putih yang besar dengan bentuk oval
+                    return True, "Gambar terdeteksi mengandung topeng atau benda oval putih. Hanya upload gambar sampah."
+    
+    # Deteksi foto dengan efek blur atau gerakan (kemungkinan selfie)
+    # Foto blur biasanya memiliki variasi gradient yang rendah
+    if grad_x.shape[1] > 0 and grad_y.shape[0] > 0:
+        min_height = min(grad_x.shape[0], grad_y.shape[0])
+        min_width = min(grad_x.shape[1], grad_y.shape[1])
+        
+        if min_height > 0 and min_width > 0:
+            grad_x_compat = grad_x[:min_height, :min_width]
+            grad_y_compat = grad_y[:min_height, :min_width]
+            
+            # Hitung rata-rata gradient (indikator blur)
+            avg_gradient = np.mean(np.sqrt(grad_x_compat**2 + grad_y_compat**2))
+            
+            # Jika gradient terlalu rendah (terlalu blur) dan ada area putih, kemungkinan foto selfie
+            if avg_gradient < 20 and white_ratio > 0.1:
+                return True, "Gambar terdeteksi sebagai foto blur/selfie. Hanya upload gambar sampah."
+            
+            # Deteksi foto dengan gerakan (streaking effect)
+            # Foto dengan gerakan biasanya memiliki gradient yang tidak teratur
+            gradient_std = np.std(np.sqrt(grad_x_compat**2 + grad_y_compat**2))
+            if gradient_std > 25 and white_ratio > 0.1:
+                return True, "Gambar terdeteksi sebagai foto dengan gerakan/selfie. Hanya upload gambar sampah."
     
     return False, ""
 
@@ -148,26 +187,56 @@ def detect_non_waste_image(image):
     if is_not_waste:
         return True, not_waste_message
     
-    # Deteksi screenshot atau interface
+    # Deteksi screenshot atau interface - LEBIH KETAT
     gray = np.mean(img_array, axis=2)
     
     # Deteksi area dengan warna yang sangat terang (kemungkinan UI/screenshot)
     bright_areas = np.sum(gray > 240)
-    if bright_areas > img_array.shape[0] * img_array.shape[1] * 0.5:
+    if bright_areas > img_array.shape[0] * img_array.shape[1] * 0.3:  # Lebih ketat dari 0.5
         return True, "Gambar terdeteksi sebagai screenshot atau interface. Hanya upload gambar sampah."
     
     # Deteksi area dengan warna yang sangat gelap (kemungkinan foto gelap)
     dark_areas = np.sum(gray < 50)
-    if dark_areas > img_array.shape[0] * img_array.shape[1] * 0.6:
+    if dark_areas > img_array.shape[0] * img_array.shape[1] * 0.4:  # Lebih ketat dari 0.6
         return True, "Gambar terlalu gelap. Pastikan gambar sampah terlihat jelas."
     
     # Deteksi gambar dengan terlalu banyak warna (kemungkinan foto atau seni)
     color_variance = np.std(img_array)
-    if color_variance > 80:
+    if color_variance > 70:  # Lebih ketat dari 80
         # Cek apakah ini foto yang terlalu berwarna
-        bright_colors = np.sum(np.std(img_array, axis=2) > 40)
-        if bright_colors > img_array.shape[0] * img_array.shape[1] * 0.3:
+        bright_colors = np.sum(np.std(img_array, axis=2) > 35)  # Lebih ketat dari 40
+        if bright_colors > img_array.shape[0] * img_array.shape[1] * 0.25:  # Lebih ketat dari 0.3
             return True, "Gambar terdeteksi sebagai foto berwarna. Hanya upload gambar sampah."
+    
+    # Deteksi khusus untuk screenshot terminal/console
+    # Terminal biasanya memiliki background gelap dengan teks terang
+    dark_background = np.sum(gray < 100)  # Area gelap (background terminal)
+    bright_text = np.sum(gray > 200)      # Area terang (teks terminal)
+    
+    # Jika ada banyak area gelap DAN area terang, kemungkinan screenshot terminal
+    if dark_background > img_array.shape[0] * img_array.shape[1] * 0.3 and bright_text > img_array.shape[0] * img_array.shape[1] * 0.05:
+        return True, "Gambar terdeteksi sebagai screenshot terminal/console. Hanya upload gambar sampah."
+    
+    # Deteksi pola teks (garis horizontal yang teratur)
+    # Screenshot terminal biasanya memiliki banyak garis horizontal
+    h_edges = np.abs(np.diff(gray, axis=1))
+    strong_h_lines = np.sum(h_edges > 25)  # Lebih sensitif
+    if strong_h_lines > img_array.shape[0] * img_array.shape[1] * 0.15:  # Lebih sensitif
+        return True, "Gambar terdeteksi memiliki pola teks seperti screenshot. Hanya upload gambar sampah."
+    
+    # Deteksi karakteristik khusus terminal (background gelap dengan teks berwarna)
+    # Terminal sering memiliki teks hijau, kuning, atau putih di background hitam
+    r, g, b = img_array[:, :, 0], img_array[:, :, 1], img_array[:, :, 2]
+    
+    # Deteksi teks hijau (karakteristik terminal)
+    green_text = np.sum((g > 150) & (r < 100) & (b < 100))
+    if green_text > img_array.shape[0] * img_array.shape[1] * 0.05:
+        return True, "Gambar terdeteksi memiliki teks hijau seperti terminal. Hanya upload gambar sampah."
+    
+    # Deteksi teks kuning (karakteristik terminal)
+    yellow_text = np.sum((r > 200) & (g > 200) & (b < 100))
+    if yellow_text > img_array.shape[0] * img_array.shape[1] * 0.05:
+        return True, "Gambar terdeteksi memiliki teks kuning seperti terminal. Hanya upload gambar sampah."
     
     return False, ""
 
@@ -211,11 +280,16 @@ def page_classification():
     st.title("📸 Unggah gambar sampah yang ingin Anda klasifikasikan")
     st.info("⚠️ **PENTING**: Hanya upload gambar sampah organik atau anorganik yang jelas. Jangan upload foto wajah, dokumen, tabel, atau gambar lain yang bukan sampah.")
     st.write("Anda dapat mengunggah banyak gambar sekaligus, lalu memilih file mana yang ingin diproses.")
-    # Hapus debug mode dan bypass validation UI
-    # debug_mode = st.checkbox("🔧 Debug Mode (Tampilkan info detail)")
-    # bypass_validation = st.checkbox("🚀 Bypass Validasi (Untuk testing dataset)")
-    debug_mode = False
-    bypass_validation = True
+    
+    # Opsi untuk mengontrol validasi
+    col1, col2 = st.columns(2)
+    with col1:
+        debug_mode = st.checkbox("🔧 Debug Mode (Tampilkan info detail)")
+    with col2:
+        bypass_validation = st.checkbox("🚀 Bypass Validasi (Untuk testing)")
+    
+    if bypass_validation:
+        st.warning("⚠️ **Mode Testing Aktif**: Validasi gambar dilewati. Hanya gunakan untuk testing dataset.")
     st.markdown("""
     ### 🚫 **Yang TIDAK Diperbolehkan:**
     - 📄 Dokumen, tabel, atau kertas
@@ -303,7 +377,7 @@ def page_classification():
                             white_ratio = np.sum(gray_img > 200) / (gray_img.shape[0] * gray_img.shape[1])
                             
                             if white_ratio > 0.8:  # Lebih longgar
-                                st.error(f"❌ **{uploaded_file.name}**: Gambar terdeteksi sebagai dokumen/kertas meskipun confidence tinggi. Hanya upload gambar sampah.")
+                                st.error(f"❌ **{uploaded_file.name}**: Gambar terdeteksi sebagai dokumen/kertas. Hanya upload gambar sampah.")
                             else:
                                 st.success(f"✅ **{uploaded_file.name}**: **{predicted_label}** ({confidence:.2f}%)")
                                 current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())

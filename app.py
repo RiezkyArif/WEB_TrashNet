@@ -10,13 +10,8 @@ import gdown
 import os
 
 # --- KONFIGURASI MODEL DAN LABEL ---
-MODEL_PATH = "Model Sampah.h5"
+MODEL_PATH = "model97.h5"
 class_names = ['Organik', 'Anorganik']
-
-# Download model jika belum ada
-if not os.path.exists(MODEL_PATH):
-    url = "https://drive.google.com/uc?1gT0XYZabCyzD4B_JgKfMb7P-vn"  # GANTI dengan ID file Drive asli kamu
-    gdown.download(url, MODEL_PATH, quiet=False)
 
 st.set_page_config(page_title="SmartWaste", layout="wide")
 
@@ -34,7 +29,10 @@ except FileNotFoundError as e:
 
 # Fungsi untuk validasi gambar sampah
 def validate_waste_image(image, debug_mode=False):
-    # Bypass: always valid
+    # Panggil fungsi deteksi gambar non-sampah
+    is_not_waste, message = detect_non_waste_image(image)
+    if is_not_waste:
+        return False, message
     return True, "Gambar valid"
 
 # Fungsi tambahan untuk deteksi gambar yang bukan sampah
@@ -248,16 +246,16 @@ def page_home():
     st.title("🌿 Selamat Datang di SmartWaste")
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.image("assets/1.png", caption="SmartWaste - Klasifikasi Sampah Organik & Anorganik", width=550)
+        st.image("assets/1.png", caption="", width=550)
     # Tulisan di pojok kiri
     st.markdown(
-        "<h4 style='text-align: center; margin-center: 5px;'>Mulai klasifikasikan sampahmu sekarang!</h4>",
+        "<h4 style='text-align: left; margin-left: 5px;'>Mulai klasifikasikan sampahmu sekarang!</h4>",
         unsafe_allow_html=True
     )
     st.markdown("""
     ### Fitur Utama
     - 📷 **Klasifikasi Sampah Otomatis**: Upload foto sampah dan dapatkan hasil klasifikasi langsung (organik/anorganik) dengan tingkat kepercayaan.
-    - 📊 **Riwayat Prediksi**: Lihat riwayat hasil klasifikasi yang telah Anda lakukan dan Anda bisa menyimpan hasilnya berbentuk file.csv.
+    - 📊 **Riwayat Prediksi**: Lihat riwayat hasil klasifikasi yang telah Anda lakukan.
     - 📚 **Artikel Edukatif**: Pelajari perbedaan dan pengelolaan sampah organik & anorganik.
     """)
 
@@ -362,7 +360,7 @@ def page_classification():
                         prediction = model.predict(img_array, verbose=0)  # Hilangkan output verbose
                         predicted_label = class_names[np.argmax(prediction)]
                         confidence = np.max(prediction) * 100
-                        confidence_threshold = 60  # Turunkan threshold confidence (%)
+                        confidence_threshold = 50
                         
                         if debug_mode:
                             st.write(f"🔍 Debug: Raw prediction = {prediction}")
@@ -554,4 +552,4 @@ if page == "🏠 Beranda":
 elif page == "🗑️ Klasifikasi Sampah":
     page_classification()
 elif page == "📚 Edukasi Sampah":
-    page_articles()
+    page_articles() 

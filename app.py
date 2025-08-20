@@ -10,7 +10,7 @@ import gdown
 import os
 
 # --- KONFIGURASI MODEL DAN LABEL ---
-MODEL_PATH = "model97.h5"
+MODEL_PATH = "trashnet.h5"
 class_names = ['Organik', 'Anorganik']
 
 st.set_page_config(page_title="SmartWaste", layout="wide")
@@ -29,11 +29,138 @@ except FileNotFoundError as e:
 
 # Fungsi untuk validasi gambar sampah
 def validate_waste_image(image, debug_mode=False):
-    # Panggil fungsi deteksi gambar non-sampah
-    is_not_waste, message = detect_non_waste_image(image)
-    if is_not_waste:
-        return False, message
+    """
+    Validasi yang lebih longgar untuk memastikan gambar adalah sampah
+    """
+    # Konversi ke array
+    img_array = np.array(image)
+    
+    # Deteksi gambar grayscale
+    r, g, b = img_array[:, :, 0], img_array[:, :, 1], img_array[:, :, 2]
+    # Hitung perbedaan antara channel R, G, B
+    r_g_diff = np.mean(np.abs(r - g))
+    r_b_diff = np.mean(np.abs(r - b))
+    g_b_diff = np.mean(np.abs(g - b))
+    
+    # Debug info (hanya jika debug mode aktif)
+    if debug_mode:
+        st.write(f"🔍 Debug: Ukuran gambar = {img_array.shape}")
+        st.write(f"🔍 Debug: Rata-rata kecerahan = {np.mean(np.mean(img_array, axis=2)):.2f}")
+        st.write(f"🔍 Debug: Standar deviasi warna = {np.std(img_array):.2f}")
+        st.write(f"🔍 Debug: Perbedaan R-G = {r_g_diff:.2f}")
+        st.write(f"🔍 Debug: Perbedaan R-B = {r_b_diff:.2f}")
+        st.write(f"🔍 Debug: Perbedaan G-B = {g_b_diff:.2f}")
+        if r_g_diff < 5 and r_b_diff < 5 and g_b_diff < 5:
+            st.warning("⚠️ Debug: Gambar terdeteksi sebagai grayscale!")
+        else:
+            st.success("✅ Debug: Gambar berwarna terdeteksi")
+    
+    # Jika perbedaan antar channel sangat kecil, kemungkinan grayscale
+    if r_g_diff < 5 and r_b_diff < 5 and g_b_diff < 5:
+        return False, "Gambar terdeteksi sebagai grayscale. Upload gambar sampah berwarna untuk hasil klasifikasi yang lebih akurat."
+    
+    # Deteksi tambahan untuk gambar yang sangat monoton (kemungkinan grayscale)
+    # Hitung standar deviasi per channel
+    r_std = np.std(r)
+    g_std = np.std(g)
+    b_std = np.std(b)
+    
+    # Jika semua channel memiliki standar deviasi yang sangat rendah, kemungkinan grayscale
+    if r_std < 10 and g_std < 10 and b_std < 10:
+        return False, "Gambar terdeteksi sebagai grayscale (variasi warna sangat rendah). Upload gambar sampah berwarna untuk hasil klasifikasi yang lebih akurat."
+    
+    # Cek ukuran gambar (lebih longgar)
+    if img_array.shape[0] < 50 or img_array.shape[1] < 50:
+        return False, "Gambar terlalu kecil. Upload gambar dengan resolusi yang lebih tinggi (minimal 50x50 pixel)."
+    
+    # Cek apakah gambar terlalu terang atau terlalu gelap (lebih longgar)
+    gray = np.mean(img_array, axis=2)
+    if np.mean(gray) < 20 or np.mean(gray) > 240:
+        return False, "Gambar terlalu terang atau terlalu gelap. Pastikan gambar sampah terlihat jelas."
+    
+    # Cek variasi warna (lebih longgar)
+    color_std = np.std(img_array)
+    if color_std < 15:
+        return False, "Gambar terlalu monoton. Pastikan gambar menunjukkan sampah yang jelas."
+    
+    # Cek apakah gambar memiliki terlalu banyak garis lurus (lebih longgar)
+    gray_img = np.mean(img_array, axis=2)
+    
+    # Deteksi garis horizontal dan vertikal
+    horizontal_lines = np.sum(np.abs(np.diff(gray_img, axis=1)) > 40)
+    vertical_lines = np.sum(np.abs(np.diff(gray_img, axis=0)) > 40)
+    
+    # Jika terlalu banyak garis, kemungkinan dokumen/tabel (lebih longgar)
+    if horizontal_lines > img_array.shape[0] * 0.5 or vertical_lines > img_array.shape[1] * 0.5:
+        return False, "Gambar terdeteksi sebagai dokumen/tabel. Hanya upload gambar sampah organik atau anorganik."
+    
+    # Cek apakah gambar memiliki terlalu banyak teks (lebih longgar)
+    contrast_areas = np.sum(np.std(gray_img, axis=1) > 60)
+    if contrast_areas > img_array.shape[0] * 0.6:
+        return False, "Gambar terdeteksi mengandung teks/dokumen. Hanya upload gambar sampah."
+    
+    # Cek rasio aspek (lebih longgar)
+    aspect_ratio = img_array.shape[1] / img_array.shape[0]
+    if aspect_ratio > 5 or aspect_ratio < 0.2:
+        return False, "Rasio aspek gambar tidak wajar. Pastikan gambar sampah tidak terlalu panjang atau lebar."
+    
     return True, "Gambar valid"
+
+# Fungsi khusus untuk cek grayscale saja
+def check_grayscale_only(image, debug_mode=False):
+    """
+    Hanya mengecek apakah gambar grayscale, tanpa validasi lain
+    """
+    img_array = np.array(image)
+    
+    # Deteksi gambar grayscale
+    r, g, b = img_array[:, :, 0], img_array[:, :, 1], img_array[:, :, 2]
+    # Hitung perbedaan antara channel R, G, B
+    r_g_diff = np.mean(np.abs(r - g))
+    r_b_diff = np.mean(np.abs(r - b))
+    g_b_diff = np.mean(np.abs(g - b))
+    
+    # Debug info (hanya jika debug mode aktif)
+    if debug_mode:
+        st.write(f"🔍 Debug Grayscale Check: Perbedaan R-G = {r_g_diff:.2f}")
+        st.write(f"🔍 Debug Grayscale Check: Perbedaan R-B = {r_b_diff:.2f}")
+        st.write(f"🔍 Debug Grayscale Check: Perbedaan G-B = {g_b_diff:.2f}")
+    
+    # Jika perbedaan antar channel sangat kecil, kemungkinan grayscale
+    if r_g_diff < 5 and r_b_diff < 5 and g_b_diff < 5:
+        return True, "Gambar terdeteksi sebagai grayscale. Upload gambar sampah berwarna untuk hasil klasifikasi yang lebih akurat."
+    
+    # Deteksi tambahan untuk gambar yang sangat monoton
+    r_std = np.std(r)
+    g_std = np.std(g)
+    b_std = np.std(b)
+    
+    if debug_mode:
+        st.write(f"🔍 Debug Grayscale Check: Std R = {r_std:.2f}, G = {g_std:.2f}, B = {b_std:.2f}")
+    
+    # Jika semua channel memiliki standar deviasi yang sangat rendah, kemungkinan grayscale
+    if r_std < 10 and g_std < 10 and b_std < 10:
+        return True, "Gambar terdeteksi sebagai grayscale (variasi warna sangat rendah). Upload gambar sampah berwarna untuk hasil klasifikasi yang lebih akurat."
+    
+    return False, ""
+
+# Fungsi untuk memberikan informasi tentang gambar grayscale
+def explain_grayscale_issue():
+    """
+    Memberikan penjelasan mengapa gambar grayscale tidak optimal
+    """
+    st.markdown("""
+    ### 🔍 **Mengapa Gambar Berwarna Lebih Baik?**
+    
+    **Model AI Anda dilatih dengan gambar berwarna** dan menggunakan informasi warna untuk membedakan sampah:
+    
+    - 🍎 **Sampah Organik**: Biasanya memiliki warna coklat, hijau, kuning (daun, kulit buah, sisa makanan)
+    - 🥤 **Sampah Anorganik**: Biasanya memiliki warna biru, merah, transparan (plastik, kaleng, botol)
+    
+    **Gambar grayscale menghilangkan informasi warna penting** yang dibutuhkan model untuk klasifikasi yang akurat.
+    
+    **Solusi**: Gunakan gambar berwarna atau foto sampah dengan pencahayaan yang baik.
+    """)
 
 # Fungsi tambahan untuk deteksi gambar yang bukan sampah
 def is_likely_not_waste(image):
@@ -277,6 +404,13 @@ def page_home():
 def page_classification():
     st.title("📸 Unggah gambar sampah yang ingin Anda klasifikasikan")
     st.info("⚠️ **PENTING**: Hanya upload gambar sampah organik atau anorganik yang jelas. Jangan upload foto wajah, dokumen, tabel, atau gambar lain yang bukan sampah.")
+    st.info("🎨 **REKOMENDASI**: Gunakan gambar berwarna untuk hasil klasifikasi yang lebih akurat. Model AI dilatih dengan gambar berwarna dan dapat mengenali sampah dengan lebih baik.")
+    st.warning("⚫ **PENTING**: Gambar grayscale/hitam putih akan ditolak otomatis untuk memastikan akurasi klasifikasi yang optimal.")
+    
+    # Tombol untuk menampilkan penjelasan detail
+    if st.button("ℹ️ Mengapa gambar berwarna lebih baik?"):
+        explain_grayscale_issue()
+    
     st.write("Anda dapat mengunggah banyak gambar sekaligus, lalu memilih file mana yang ingin diproses.")
     
     # Opsi untuk mengontrol validasi
@@ -287,7 +421,7 @@ def page_classification():
         bypass_validation = st.checkbox("🚀 Bypass Validasi (Untuk testing)")
     
     if bypass_validation:
-        st.warning("⚠️ **Mode Testing Aktif**: Validasi gambar dilewati. Hanya gunakan untuk testing dataset.")
+        st.warning("⚠️ **Mode Testing Aktif**: Validasi gambar dilewati (kecuali deteksi grayscale). Hanya gunakan untuk testing dataset.")
     st.markdown("""
     ### 🚫 **Yang TIDAK Diperbolehkan:**
     - 📄 Dokumen, tabel, atau kertas
@@ -296,16 +430,18 @@ def page_classification():
     - 📱 Screenshot aplikasi atau interface
     - 🖥️ Interface komputer atau menu
     - 🎨 Foto berwarna yang bukan sampah
+    - ⚫ **Gambar grayscale/hitam putih** (tidak optimal untuk klasifikasi)
     
     ### ✅ **Yang Diperbolehkan:**
     - 🍎 Sampah organik: sisa makanan, daun, kulit buah
     - 🥤 Sampah anorganik: plastik, kaleng, botol, kardus
     - 🗑️ Sampah dalam kondisi normal (tidak terlalu terang/gelap)
+    - 🌈 **Gambar berwarna** (direkomendasikan untuk hasil terbaik)
     """)
 
     uploaded_files = st.file_uploader(
         "Pilih satu atau beberapa gambar sampah...",
-        type=["jpg", "jpeg", "png"],
+        type=["jpg", "png"],
         accept_multiple_files=True
     )
 
@@ -322,7 +458,7 @@ def page_classification():
             if uploaded_file.name in selected_files:
                 image = Image.open(uploaded_file).convert("RGB")
                 
-                # Validasi gambar sampah (skip jika bypass mode aktif)
+                # Validasi gambar sampah (selalu cek grayscale, bahkan dalam bypass mode)
                 if not bypass_validation:
                     is_valid, validation_message = validate_waste_image(image, debug_mode)
                     
@@ -340,7 +476,15 @@ def page_classification():
                             st.image(image, caption=f"Gambar ditolak: {uploaded_file.name}", width=300)
                         continue
                 else:
-                    st.info(f"🚀 **{uploaded_file.name}**: Validasi dilewati")
+                    # Meskipun bypass mode aktif, tetap cek grayscale
+                    is_grayscale, grayscale_message = check_grayscale_only(image, debug_mode)
+                    if is_grayscale:
+                        st.error(f"❌ **{uploaded_file.name}**: {grayscale_message}")
+                        if debug_mode:
+                            st.image(image, caption=f"Gambar ditolak: {uploaded_file.name}", width=300)
+                        continue
+                    else:
+                        st.info(f"🚀 **{uploaded_file.name}**: Validasi dilewati (kecuali grayscale)")
                 
                 # Tampilkan gambar di tengah hanya saat proses
                 with st.spinner('🔄 Memproses gambar...'):
@@ -552,4 +696,4 @@ if page == "🏠 Beranda":
 elif page == "🗑️ Klasifikasi Sampah":
     page_classification()
 elif page == "📚 Edukasi Sampah":
-    page_articles() 
+    page_articles()

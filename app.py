@@ -11,7 +11,7 @@ import os
 
 # --- KONFIGURASI MODEL DAN LABEL ---
 MODEL_PATH = "trashnet.h5"
-class_names = ['Organik', 'Anorganik']
+class_names = ['Anorganik', 'Organik']
 
 st.set_page_config(page_title="SmartWaste", layout="wide")
 

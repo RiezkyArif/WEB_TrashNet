@@ -4,3 +4,5 @@ pandas
 numpy
 matplotlib
 gdown
+scikit-learn
+pillow
